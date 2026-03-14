@@ -23,6 +23,28 @@
     Mike Mdm's approach (https://mikemdm.de/2023/01/29/can-you-create-a-autopilot-hash-from-winpe-yes/)
 #>
 
+
+#region Download SetupComplete.ps1
+
+    # URL of the file to download
+    $Url = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/07bc731af970a6b7d23d15c39b8a951b137b7ba2/SetupComplete/SetupComplete.ps1"
+
+    # Destination folder
+    $DestinationFolder = "X:\OSDCloud\Config\Scripts\SetupComplete"
+
+    # Extract filename from URL
+    $FileName = Split-Path $Url -Leaf
+
+    # Full destination path
+    $DestinationFile = $DestinationFolder + "\" + $FileName
+
+    # Download file
+    Invoke-WebRequest -Uri $Url -OutFile $DestinationFile
+
+    Write-Host "File downloaded to $DestinationFile"
+    
+#endregion
+
 # -------------------------------------------------
 # Tenant selection logic starts here
 # -------------------------------------------------
