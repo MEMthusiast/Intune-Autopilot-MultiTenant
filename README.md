@@ -6,6 +6,7 @@ Idea from: https://github.com/blawalt/WinPEAP
 Best to Use in combination with OSDCloud and a Multi tenant enterprise application that has Autopilot rights.
 
 OSDCloud: https://github.com/OSDeploy/OSDCloud
+
 Multi tenant app: https://learningbytesblog.com/posts/Muiltitenant-Entra-APP-for-multitenant-managment/
 
 # TenantSelectorAutopilotHashUpload.ps1
@@ -13,8 +14,15 @@ Multi tenant app: https://learningbytesblog.com/posts/Muiltitenant-Entra-APP-for
 
 # SetupComplete.ps1
 
-Default OSDCloud log path
-C:\OSDCloud\Logs
+#OSDCloud log files are cleaned up
+
+Default OSDCloud log paths:
+
+C:\OSDCloud\Logs  
 C:\Windows\Temp\osdcloud-logs
 
 All logs moved with SetupComplete script to: C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD
+
+#Windows product key is enabled
+
+#Bitlocker will be enabled
