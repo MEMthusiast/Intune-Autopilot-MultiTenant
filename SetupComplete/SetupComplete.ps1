@@ -8,7 +8,6 @@
     # Copying OSDCloud Logs
     If (Test-Path -Path 'C:\OSDCloud\Logs') {
         Move-Item 'C:\OSDCloud\Logs\*.*' -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
-    }
 
     If (Test-Path -Path 'C:\Windows\Temp\osdcloud-logs') {
         Get-ChildItem 'C:\Windows\Temp\osdcloud-logs' | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
@@ -117,19 +116,21 @@
             catch {Write-Host -Message "Error enabling bitlocker"}
 
             #wait until encryption status 100%
-            $encryptionComplete = $false
+            $EncryptionComplete = $false
             $maxRetries = 60
             $retryCount = 0
-            while (-not $encryptionComplete -and $retryCount -lt $maxRetries) {
+            while (-not $EncryptionComplete -and $retryCount -lt $maxRetries) {
                 Start-Sleep -Seconds 10
                 $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
                 if (($BitlockerStatus.EncryptionPercentage -eq 100) -and ($BitlockerStatus.VolumeStatus -eq "FullyEncrypted")) {
-                    $encryptionComplete = $true
+                    $EncryptionComplete = $true
                 }
                 #view process in log
                 Write-Host -Message "EncryptionPercentage $($BitlockerStatus.EncryptionPercentage)"
             }
-            
+                $retryCount++
+            }
+
             #backup bitlocker key to Microsoft
             if ($BitlockerStatus.VolumeType -eq "OperatingSystem"){
                 try {BackupToAAD-BitLockerKeyProtector -MountPoint $DriveLetter -KeyProtectorId $BitlockerStatus.KeyProtector[1].KeyProtectorId}
@@ -139,11 +140,11 @@
                 try {BackupToAAD-BitLockerKeyProtector -MountPoint $DriveLetter -KeyProtectorId $BitlockerStatus.KeyProtector[0].KeyProtectorId}
                 catch {Write-Host -Message "Error backup bitlocker key to Microsoft"}
             }
-            
+
             #resume and enable bitlocker
             try {Resume-BitLocker -MountPoint $DriveLetter}
             catch {Write-Host -Message "error resuming bitlocker"}
-                
+
             #autounlock bitlocker Data-drives
             If ($BitlockerStatus.VolumeType -ne "OperatingSystem")  {
                 try {Enable-BitLockerAutoUnlock -MountPoint $DriveLetter}
