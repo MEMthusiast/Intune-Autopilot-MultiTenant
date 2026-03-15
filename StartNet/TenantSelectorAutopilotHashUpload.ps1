@@ -50,8 +50,11 @@
 
 #region optional parameters
 
-$SetupCompleteUrl  = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/SetupComplete/SetupComplete.ps1"
-$ParametersUrl = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/config.json"
+$SetupCompleteUrl  = ""
+#Example: https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/SetupComplete/SetupComplete.ps1
+
+$ParametersUrl = ""
+#Example: https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/config.json
 
 #endregion optional parameters
 
