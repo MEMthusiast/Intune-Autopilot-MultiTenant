@@ -51,21 +51,23 @@ Add-Type -AssemblyName PresentationFramework
     Set-Progress "Cleaning up OSDCloud files..." 20
     Write-Host "Execute OSD Cloud Cleanup Script"
 
-    # Copying the OOBEDeploy and AutopilotOOBE Logs
-    Get-ChildItem 'C:\Windows\Temp' -Filter *OOBE* | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
-
     # Copying OSDCloud Logs
     If (Test-Path -Path 'C:\OSDCloud\Logs') {
         Move-Item 'C:\OSDCloud\Logs\*.*' -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
     }
+
     If (Test-Path -Path 'C:\Windows\Temp\osdcloud-logs') {
-        Move-Item 'C:\Windows\Temp\osdcloud-logs' -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
+        Get-ChildItem 'C:\Windows\Temp\osdcloud-logs' | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
     }
-    Move-Item 'C:\ProgramData\OSDeploy\*.*' -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
+    
+    If (Test-Path -Path 'C:\ProgramData\OSDeploy') {
+        Get-ChildItem 'C:\ProgramData\OSDeploy' | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
+    }
 
     If (Test-Path -Path 'C:\Temp') {
         Get-ChildItem 'C:\Temp' -Filter *OOBE* | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
         Get-ChildItem 'C:\Windows\Temp' -Filter *Events* | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
+        Get-ChildItem 'C:\Windows\Temp' -Filter *OOBE* | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
     }
 
     # Cleanup directories
@@ -120,9 +122,16 @@ Add-Type -AssemblyName PresentationFramework
         
         If ($BitlockerStatus.ProtectionStatus -like "*off*" -or $BitlockerStatus.EncryptionMethod -ne "XtsAes256")  {
             #set registerkeys to newest encryption method
-            Set-RegistryKey -Key "HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\FVE" -Name "EncryptionMethod" -Type "Dword" -Value "7"
-            Set-RegistryKey -Key "HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\FVE" -Name "EncryptionMethodWithXtsOs" -Type "Dword" -Value "7"
-            Set-RegistryKey -Key "HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\FVE" -Name "EncryptionMethodWithXtsFdv" -Type "Dword" -Value "7"
+            $Key = "HKLM:\SOFTWARE\Policies\Microsoft\FVE"
+
+            # Ensure the registry key exists
+            if (!(Test-Path $Key)) {
+                New-Item -Path $Key -Force | Out-Null
+            }
+
+            New-ItemProperty -Path $Key -Name "EncryptionMethod" -PropertyType DWord -Value 7 -Force | Out-Null
+            New-ItemProperty -Path $Key -Name "EncryptionMethodWithXtsOs" -PropertyType DWord -Value 7 -Force | Out-Null
+            New-ItemProperty -Path $Key -Name "EncryptionMethodWithXtsFdv" -PropertyType DWord -Value 7 -Force | Out-Null
             
             #Disable bitlocker if not decrypted
             if ($BitlockerStatus.VolumeStatus -ne "FullyDecrypted"){
@@ -192,7 +201,9 @@ Add-Type -AssemblyName PresentationFramework
         }
     }
 
-    Start-Process -FilePath "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe" -ArgumentList "intunemanagementextension://synccompliance"
+    if (Test-Path "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe") {
+        Start-Process -FilePath "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe" -ArgumentList "intunemanagementextension://synccompliance"
+    }
 
 #endregion Enable Bitlocker
 
