@@ -27,7 +27,7 @@
 #region Download SetupComplete.ps1
 
     # URL of the file to download
-    $Url = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/07bc731af970a6b7d23d15c39b8a951b137b7ba2/SetupComplete/SetupComplete.ps1"
+    $Url = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/SetupComplete/SetupComplete.ps1"
 
     # Destination folder
     $DestinationFolder = "X:\OSDCloud\Config\Scripts\SetupComplete"
