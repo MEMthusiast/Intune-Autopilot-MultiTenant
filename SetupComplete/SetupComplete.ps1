@@ -27,7 +27,7 @@
     # Copying OSDCloud Logs
     If (Test-Path -Path 'C:\OSDCloud\Logs') {
         Move-Item 'C:\OSDCloud\Logs\*.*' -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
-
+    }
     If (Test-Path -Path 'C:\Windows\Temp\osdcloud-logs') {
         Get-ChildItem 'C:\Windows\Temp\osdcloud-logs' | Copy-Item -Destination 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD' -Force
     }
@@ -65,38 +65,44 @@
 
     Write-Host "Enabling BitLocker"
 
-    # Get driveletters from Internaldrives
-    $disks = Get-Disk | Where-Object -FilterScript {$_.Bustype -ne "USB"}
+    # Detect mounted CD/DVD/ISO
+    $cdDrives = Get-CimInstance Win32_CDROMDrive
+    if ($cdDrives) {
+        Write-Host "Bootable media detected (CD/DVD/ISO). BitLocker cannot start. Remove the CD/DVD/ISO and reboot."
+        Exit 1
+    }
+
+    # Get internal drive letters
+    $disks = Get-Disk | Where-Object { $_.Bustype -notin @("USB","Unknown") }
     $driveletters = @()
 
-    foreach ($disk in $disks)  {
+    foreach ($disk in $disks) {
         $partitions = Get-Partition -DiskNumber $disk.Number
-
         foreach ($partition in $partitions) {
-
-            if ($($partition.DriveLetter)) {
-                $driveletters += "$($partition.DriveLetter)"
-                }
+            if ($partition.DriveLetter) {
+                $driveletters += $partition.DriveLetter
+            }
         }
     }
 
-    # Check if TPM chip is available
+    # Check TPM
     $TPM = Get-TPM
+    if (-not $TPM.TpmPresent) {
+        Write-Host "No TPM chip detected"
+        Exit 1
+    }
 
-    If ($TPM.TpmPresent -like "False"){
-            Write-Host -Message "No TPM-chip detected"
-            Exit 1
-        }
+    foreach ($DriveLetter in $driveletters) {
 
-    ForEach ($DriveLetter in $DriveLetters) {
-        $DriveLetter2 = "$DriveLetter"+":"
-        $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
-        
-        If ($BitlockerStatus.ProtectionStatus -like "*off*" -or $BitlockerStatus.EncryptionMethod -ne "XtsAes256")  {
-            # Set registery keys to newest encryption method
+        $MountPoint = "${DriveLetter}:"
+        $BitlockerStatus = Get-BitLockerVolume -MountPoint $MountPoint
+
+        if ($BitlockerStatus.ProtectionStatus -eq "Off" -or $BitlockerStatus.EncryptionMethod -ne "XtsAes256") {
+
+            Write-Host "Processing drive $MountPoint"
+
+            # Ensure BitLocker policy registry keys exist
             $Key = "HKLM:\SOFTWARE\Policies\Microsoft\FVE"
-
-            # Ensure the registry key exists
             if (!(Test-Path $Key)) {
                 New-Item -Path $Key -Force | Out-Null
             }
@@ -104,114 +110,147 @@
             New-ItemProperty -Path $Key -Name "EncryptionMethod" -PropertyType DWord -Value 7 -Force | Out-Null
             New-ItemProperty -Path $Key -Name "EncryptionMethodWithXtsOs" -PropertyType DWord -Value 7 -Force | Out-Null
             New-ItemProperty -Path $Key -Name "EncryptionMethodWithXtsFdv" -PropertyType DWord -Value 7 -Force | Out-Null
-            
-            #Disable bitlocker if not decrypted
-            if ($BitlockerStatus.VolumeStatus -ne "FullyDecrypted"){
+
+            # Disable BitLocker if needed
+            if ($BitlockerStatus.VolumeStatus -ne "FullyDecrypted") {
+
+                Write-Host "Decrypting existing BitLocker configuration"
+
                 try {
-                    Clear-BitLockerAutoUnlock
-                    Disable-Bitlocker -MountPoint $DriveLetter
+                    Clear-BitLockerAutoUnlock -ErrorAction SilentlyContinue
+                    Disable-BitLocker -MountPoint $MountPoint
                 }
-                catch{Write-Host -Message "Error disabling bitlocker"}
-            }
-            
-            # Wait until decryption is complete
-            $DecryptionComplete = $false
-            while (-not $DecryptionComplete) {
-                Start-Sleep -Seconds 10
-                $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
-                if ($BitlockerStatus.VolumeStatus -eq "FullyDecrypted") {
-                    $DecryptionComplete = $true
+                catch {
+                    Write-Host "Error disabling BitLocker"
                 }
-                # View process in log
-                Write-Host -Message "DecryptionPercentage $($BitlockerStatus.EncryptionPercentage)"
-            }
-            
-            # Add TPM chip for autounlock OS-disk
-            if ($BitlockerStatus.VolumeType -eq "OperatingSystem"){
-                try {Add-BitLockerKeyProtector -MountPoint $DriveLetter -TpmProtector}
-                catch {Write-Host -Message "Error TPM add to OperatingSystem drive"}
+
+                # Wait for decryption (max 10 minutes)
+                $maxRetries = 60
+                $retryCount = 0
+
+                while ($retryCount -lt $maxRetries) {
+
+                    Start-Sleep 10
+                    $BitlockerStatus = Get-BitLockerVolume -MountPoint $MountPoint
+
+                    Write-Host "DecryptionPercentage $($BitlockerStatus.EncryptionPercentage)"
+
+                    if ($BitlockerStatus.VolumeStatus -eq "FullyDecrypted") {
+                        break
+                    }
+
+                    $retryCount++
+                }
+
+                if ($retryCount -ge $maxRetries) {
+                    Write-Host "Decryption timeout reached"
+                    continue
+                }
             }
 
-            # Encrypt disk
-            try {Enable-Bitlocker -MountPoint $DriveLetter -SkipHardwareTest -RecoveryPasswordProtector}
-            catch {Write-Host -Message "Error enabling bitlocker"}
+            # Add TPM protector for OS disk
+            if ($BitlockerStatus.VolumeType -eq "OperatingSystem") {
+                try {
+                    Add-BitLockerKeyProtector -MountPoint $MountPoint -TpmProtector
+                }
+                catch {
+                    Write-Host "Error adding TPM protector"
+                }
+            }
 
-            # Wait until encryption status 100%
-            $EncryptionComplete = $false
+            # Enable BitLocker
+            try {
+                Enable-BitLocker -MountPoint $MountPoint -SkipHardwareTest -RecoveryPasswordProtector
+            }
+            catch {
+                Write-Host "Error enabling BitLocker"
+                continue
+            }
+
+            # Wait for encryption (max 10 minutes)
             $maxRetries = 60
             $retryCount = 0
-            while (-not $EncryptionComplete -and $retryCount -lt $maxRetries) {
-                Start-Sleep -Seconds 10
-                $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
-                if (($BitlockerStatus.EncryptionPercentage -eq 100) -and ($BitlockerStatus.VolumeStatus -eq "FullyEncrypted")) {
-                    $EncryptionComplete = $true
+
+            while ($retryCount -lt $maxRetries) {
+
+                Start-Sleep 10
+                $BitlockerStatus = Get-BitLockerVolume -MountPoint $MountPoint
+
+                Write-Host "EncryptionPercentage $($BitlockerStatus.EncryptionPercentage)"
+
+                if ($BitlockerStatus.VolumeStatus -eq "FullyEncrypted") {
+                    break
                 }
-                # view process in log
-                Write-Host -Message "EncryptionPercentage $($BitlockerStatus.EncryptionPercentage)"
-            }
+
                 $retryCount++
             }
 
-            # Check if device is Entra ID or Hybrid Entra ID joined
-                $dsreg = dsregcmd /status | Out-String
-
-                $IsEntraJoined = $false
-                if ($dsreg -match "AzureAdJoined\s*:\s*YES" -or ($dsreg -match "DomainJoined\s*:\s*YES" -and $dsreg -match "AzureAdPrt\s*:\s*YES")) {
-                    $IsEntraJoined = $true
-                }
-                if ($IsEntraJoined) {
-                    Write-Host "Entra ID join detected, running BitLocker key backup"
-
-                    # Get BitLocker status for the drive
-                    $DriveLetter = "C:"  # Adjust if needed
-                    $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
-
-                    # Find RecoveryPassword protector explicitly
-                    $RecoveryKey = $BitlockerStatus.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }
-
-                    if ($RecoveryKey) {
-                        try {
-                            BackupToAAD-BitLockerKeyProtector -MountPoint $DriveLetter -KeyProtectorId $RecoveryKey.KeyProtectorId
-                            Write-Host "BitLocker key successfully backed up to Entra ID"
-                        }
-                        catch {
-                            Write-Host "Error backing up BitLocker key to Entra ID: $_"
-                        }
-                    }
-                    else {
-                        Write-Host "No Recovery Password protector found on drive $DriveLetter"
-                    }
-                }
-                else {
-                    Write-Host "Device not joined to Entra ID, skipping BitLocker key backup"
-                }
-                
-            # Resume and enable bitlocker
-            try {Resume-BitLocker -MountPoint $DriveLetter}
-            catch {Write-Host -Message "error resuming bitlocker"}
-
-            # Autounlock bitlocker Data-drives
-            If ($BitlockerStatus.VolumeType -ne "OperatingSystem")  {
-                try {Enable-BitLockerAutoUnlock -MountPoint $DriveLetter}
-                catch {Write-Host -Message "Error autounlock"}
+            if ($retryCount -ge $maxRetries) {
+                Write-Host "Encryption timeout reached"
             }
-        }
-        Else  {
-            Write-Host -Message "Bitlocker already enabled $($DriveLetter)"
-        }
-    }
 
-    if (Test-Path "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe") {
-        Start-Process -FilePath "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe" -ArgumentList "intunemanagementextension://synccompliance"
+            # Check Entra ID / Hybrid join
+            $dsreg = dsregcmd /status | Out-String
+            $IsEntraJoined = $false
+
+            if ($dsreg -match "AzureAdJoined\s*:\s*YES" -or ($dsreg -match "DomainJoined\s*:\s*YES" -and $dsreg -match "AzureAdPrt\s*:\s*YES")) {
+
+                $IsEntraJoined = $true
+            }
+
+            if ($IsEntraJoined -and $BitlockerStatus.VolumeType -eq "OperatingSystem") {
+
+                Write-Host "Entra ID join detected, backing up BitLocker key"
+
+                $RecoveryKey = $BitlockerStatus.KeyProtector |
+                            Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }
+
+                if ($RecoveryKey) {
+
+                    try {
+                        BackupToAAD-BitLockerKeyProtector `
+                            -MountPoint $MountPoint `
+                            -KeyProtectorId $RecoveryKey.KeyProtectorId
+
+                        Write-Host "BitLocker key backed up to Entra ID"
+                    }
+                    catch {
+                        Write-Host "Error backing up BitLocker key"
+                    }
+                }
+            }
+
+            # Resume BitLocker
+            try {
+                Resume-BitLocker -MountPoint $MountPoint
+            }
+            catch {
+                Write-Host "Error resuming BitLocker"
+            }
+
+            # Enable auto unlock for data drives
+            if ($BitlockerStatus.VolumeType -ne "OperatingSystem") {
+                try {
+                    Enable-BitLockerAutoUnlock -MountPoint $MountPoint
+                }
+                catch {
+                    Write-Host "Error enabling auto unlock"
+                }
+            }
+
+        }
+        else {
+            Write-Host "BitLocker already enabled on $MountPoint"
+        }
     }
-    
+        
 #endregion Enable Bitlocker
 
 #region Download CMTrace
 
     Write-Host "Downloading CMTrace..."
 
-    $Url               = "https://github.com/MEMthusiast/Intune-Autopilot-MultiTenant/raw/refs/heads/main/SetupComplete/cmtrace.exe"
+    $Url               = "https://github.com/MEMthusiast/Intune-Autopilot-MultiTenant/raw/refs/heads/main/cmtrace.exe"
     $DestinationFolder = "C:\Windows\System32"
 
     try {

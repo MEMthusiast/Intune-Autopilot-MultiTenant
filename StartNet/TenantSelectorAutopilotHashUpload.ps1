@@ -11,32 +11,89 @@
         2. Collects the hardware hash using OA3Tool, including TPM information by registering the PCPKsp.dll.
         3. Uploads the hardware hash to the selected tenant's Intune Autopilot via Microsoft Graph API.
         4. Waits for the Autopilot profile assignment to complete.
-        5. Downloads the SetupComplete.ps1 script from the GitHub repository and saves it to the appropriate location in the WinPE environment where it later will be copied to be executed before OOBE.
+        5. Optionally downloads a SetupComplete.ps1 script and saves it to the appropriate location in the WinPE environment where it later will be copied to be executed before OOBE.
 .PARAMETER GroupTag
-    Specifies the Autopilot group tag for all tenants to assign to the device.
+    Required. The Autopilot group tag for all tenants to assign to the device.
 .PARAMETER UploadToAutopilot
     Optional. Indicates whether to upload the device to Autopilot. Default is $false.
 .PARAMETER AppSecret
-    Specifies the app registration secret for authentication.
+    Required. The app registration secret for authentication.
 .PARAMETER AppId
-    Specifies the app registration ID for authentication.
+    Required. The app registration ID for authentication.
 .PARAMETER Name
-    Specifies the tenant name to display in the tenant selection UI.
+    Specifies the tenant name to display in the tenant selection UI. You can choose here for injected parameters or hardcoded parameters.
+    If using hardcoded parameters, the tenant names will be defined in the script go to #region hardcoded parameters    
+    If using injected parameters, the tenant names will be read from the config file.
 .PARAMETER TenantId
-    Specifies the Entra ID tenant ID for each tenant to upload the hardware hash to.
+    Specifies the Entra ID tenant ID for each tenant to upload the hardware hash to. You can choose here for injected parameters or hardcoded parameters.
+    If using hardcoded parameters, the tenant IDs will be defined in the script go to #region hardcoded parameters
+    If using injected parameters, the tenant IDs will be read from the config file.
+.PARAMETER SetupCompleteUrl
+    Optional. URL to download a SetupComplete.ps1 script. This script will be copied to the WinPE image and will run during the SetupComplete phase before OOBE.
+    If not provided, the script will skip downloading. The default URL points to a sample SetupComplete.ps1 in this repository.
+.PARAMETER ParametersUrl
+    Optional. If provided, the script will read tenant information from the downloaded JSON instead of using hardcoded parameters.
 .NOTES
     File Name: TenantSelectorAutopilotHashUpload.ps1
     Author: https://github.com/MEMthusiast
     Autopilot logic based on: https://github.com/blawalt/WinPEAP
 #>
 
-#region Parameters
+#region required parameters
 
-    $GroupTag = "Personal"
-    $UploadToAutopilot = $true
+    $GroupTag = ""
+    $UploadToAutopilot = $true 
     $AppSecret = ""
     $AppId = ""
 
+#endregion required parameters
+
+#region optional parameters
+
+$SetupCompleteUrl  = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/SetupComplete/SetupComplete.ps1"
+$ParametersUrl = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/config.json"
+
+#endregion optional parameters
+
+#region injected parameters
+# If ParametersUrl is provided, read tenant information from the config file instead of using hardcoded parameters. This allows for dynamic configuration without modifying the script.
+
+    if (-not [string]::IsNullOrWhiteSpace($ParametersUrl)) {
+     
+    $DestinationFolder = "X:\OSDCloud\Config\Scripts\SetupComplete"
+
+    try {
+        # Ensure TLS 1.2
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+        # Extract filename and construct destination path
+        $FileName        = Split-Path -Path $ParametersUrl -Leaf
+        $DestinationFile = Join-Path -Path $DestinationFolder -ChildPath $FileName
+
+        # Download parameter file
+        Invoke-WebRequest -Uri $ParametersUrl -OutFile $DestinationFile -UseBasicParsing -ErrorAction Stop
+
+        Write-Host "$FileName downloaded successfully to $DestinationFolder." -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Failed to download $FileName : $($_.Exception.Message)"
+    }
+
+    $config = Get-Content "X:\OSDCloud\Config\config.json" -Raw | ConvertFrom-Json
+    $Tenants = $config.Tenants
+
+    }
+    else {
+        Write-Host "ParameterUrl not provided. Using hardcoded parameters." -ForegroundColor Yellow
+    }
+
+#endregion injected parameters
+
+#region hardcoded parameters
+# If ParametersUrl is not provided, use hardcoded tenant information. This is useful if you prefer to have the tenant information directly in the script.
+
+    if ( [string]::IsNullOrWhiteSpace($ParametersUrl)) {
+    
     $Tenants = @(
     @{
         Name = "Tenant 1"
@@ -50,9 +107,13 @@
         Name = "Tenant 3"
         TenantId = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
     }
-    )
+        )
+    }
+    else {
+        Write-Host "ParametersUrl provided. Skipping hardcoded parameters and using injected parameters." -ForegroundColor Yellow
+    }
 
-#endregion Parameters
+#endregion hardcoded parameters
 
 #region Tenant Selection UI
 
@@ -60,7 +121,7 @@
     Add-Type -AssemblyName System.Drawing
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Autopilot Tenant Selector"
+    $form.Text = "Tenant Selector"
     $form.Size = "400,200"
     $form.StartPosition = "CenterScreen"
     $form.ControlBox = $false
@@ -70,37 +131,42 @@
     $dropdown.Size = "300,30"
     $dropdown.DropDownStyle = "DropDownList"
 
-    $Tenants.Name | ForEach-Object {
-        $dropdown.Items.Add($_)
+    # Sort tenants alphabetically
+    $SortedTenants = $Tenants | Sort-Object Name
+
+    # Add tenant objects directly
+    foreach ($tenant in $SortedTenants) {
+        [void]$dropdown.Items.Add($tenant)
     }
+
+    # Display tenant name in dropdown
+    $dropdown.DisplayMember = "Name"
 
     $form.Controls.Add($dropdown)
 
     $button = New-Object System.Windows.Forms.Button
     $button.Text = "Start"
     $button.Location = "150,90"
-    $form.Controls.Add($button)
 
     $form.Controls.Add($button)
-
-    # Button click event handler
 
     $button.Add_Click({
 
-        if(!$dropdown.SelectedItem){
+        if (!$dropdown.SelectedItem) {
             [System.Windows.Forms.MessageBox]::Show("Select a tenant")
             return
         }
 
-        $SelectedTenant = $Tenants | Where-Object Name -eq $dropdown.SelectedItem
+        # Change global variables based on selection
+        $script:TenantId = $dropdown.SelectedItem.TenantId
+        $script:TenantName = $dropdown.SelectedItem.Name
 
-        $script:TenantId = $SelectedTenant.TenantId
         $form.Close()
     })
 
     $form.ShowDialog()
 
-    Write-Host "Selected customer: $($dropdown.SelectedItem)" -ForegroundColor Green
+    Write-Host "Selected customer: $TenantName" -ForegroundColor Green
 
 #endregion Tenant Selection UI
 
@@ -472,9 +538,10 @@
 
 #region Download SetupComplete.ps1
 
+    if (-not [string]::IsNullOrWhiteSpace($SetupCompleteUrl)) {
+
     Write-Host "Downloading SetupComplete.ps1..." -ForegroundColor Cyan
 
-    $Url               = "https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/SetupComplete/SetupComplete.ps1"
     $DestinationFolder = "X:\OSDCloud\Config\Scripts\SetupComplete"
 
     try {
@@ -482,13 +549,13 @@
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
         # Extract filename and construct destination path
-        $FileName        = Split-Path -Path $Url -Leaf
+        $FileName        = Split-Path -Path $SetupCompleteUrl -Leaf
         $DestinationFile = Join-Path -Path $DestinationFolder -ChildPath $FileName
 
         # Download only if folder exists
         if ((Test-Path -Path $DestinationFolder)) {
 
-            Invoke-WebRequest -Uri $Url -OutFile $DestinationFile -UseBasicParsing -ErrorAction Stop
+            Invoke-WebRequest -Uri $SetupCompleteUrl -OutFile $DestinationFile -UseBasicParsing -ErrorAction Stop
 
             Write-Host "$FileName downloaded successfully to $DestinationFolder." -ForegroundColor Green
         }
@@ -499,6 +566,11 @@
     catch {
         Write-Error "Failed to download $FileName $($_.Exception.Message)" -ForegroundColor Red
     }   
+
+    }
+    else {
+    Write-Host "SetupCompleteUrl not provided. Skipping SetupComplete.ps1 download." -ForegroundColor Yellow
+    }
  
 #endregion Download SetupComplete.ps1
 
