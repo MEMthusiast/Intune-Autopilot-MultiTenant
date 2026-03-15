@@ -166,7 +166,9 @@ Add-Type -AssemblyName PresentationFramework
 
             #wait until encryption status 100%
             $encryptionComplete = $false
-            while (-not $encryptionComplete) {
+            $maxRetries = 60
+            $retryCount = 0
+            while (-not $encryptionComplete -and $retryCount -lt $maxRetries) {
                 Start-Sleep -Seconds 10
                 $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
                 if (($BitlockerStatus.EncryptionPercentage -eq 100) -and ($BitlockerStatus.VolumeStatus -eq "FullyEncrypted")) {
