@@ -134,10 +134,22 @@ $ParametersUrl = ""
     $dropdown.Size = "300,30"
     $dropdown.DropDownStyle = "DropDownList"
 
-    # Sort tenants alphabetically
-    $SortedTenants = $Tenants | Sort-Object Name
+    # Convert all tenants to PSCustomObjects first
+    $TenantObjects = $Tenants | ForEach-Object {
+        if ($_ -is [hashtable]) {
+            [PSCustomObject]@{
+                Name     = $_.Name
+                TenantId = $_.TenantId    
+            }
+        } else {
+            $_  # already PSCustomObject from JSON
+        }
+    }
 
-    # Add tenant objects directly
+    # Sort PSCustomObjects alphabetically by Name
+    $SortedTenants = $TenantObjects | Sort-Object Name
+
+    # Add sorted tenant objects to dropdown
     foreach ($tenant in $SortedTenants) {
         [void]$dropdown.Items.Add($tenant)
     }
@@ -150,19 +162,19 @@ $ParametersUrl = ""
     $button = New-Object System.Windows.Forms.Button
     $button.Text = "Start"
     $button.Location = "150,90"
-
     $form.Controls.Add($button)
 
     $button.Add_Click({
-
         if (!$dropdown.SelectedItem) {
             [System.Windows.Forms.MessageBox]::Show("Select a tenant")
             return
         }
 
-        # Change global variables based on selection
-        $script:TenantId = $dropdown.SelectedItem.TenantId
-        $script:TenantName = $dropdown.SelectedItem.Name
+        $SelectedTenant = $dropdown.SelectedItem
+
+        # Only set tenant-related variables
+        $script:TenantId   = $SelectedTenant.TenantId
+        $script:TenantName = $SelectedTenant.Name
 
         $form.Close()
     })
