@@ -38,7 +38,6 @@
     Write-Host "Enable OEM Product Key"
 
     $(Get-WmiObject SoftwareLicensingService).OA3xOriginalProductKey | foreach{ if ( $null -ne $_ ) { Write-Host "Installing"$_;changepk.exe /Productkey $_ } else { Write-Host "No key present" } }
-
 #endregion Enable WIndows Product Key
 
 #region Enable BitLocker
@@ -159,7 +158,37 @@
     if (Test-Path "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe") {
         Start-Process -FilePath "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe" -ArgumentList "intunemanagementextension://synccompliance"
     }
-
 #endregion Enable Bitlocker
+
+#region Download CMTrace
+    Write-Host "Downloading CMTrace..."
+
+    $Url               = "https://github.com/MEMthusiast/Intune-Autopilot-MultiTenant/raw/refs/heads/main/SetupComplete/cmtrace.exe"
+    $DestinationFolder = "C:\Windows\System32"
+
+    try {
+        # Ensure TLS 1.2+
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+        # Extract filename and construct destination path
+        $FileName        = Split-Path -Path $Url -Leaf
+        $DestinationFile = Join-Path -Path $DestinationFolder -ChildPath $FileName
+
+        # Download only if file doesn't already exist
+        if (-not (Test-Path -Path $DestinationFile)) {
+
+            Invoke-WebRequest -Uri $Url -OutFile $DestinationFile -UseBasicParsing -ErrorAction Stop
+
+            Write-Host "CMTrace downloaded successfully to $DestinationFile"
+        }
+        else {
+            Write-Host "CMTrace already exists at $DestinationFile"
+        }
+
+    }
+    catch {
+        Write-Error "Failed to download CMTrace: $($_.Exception.Message)"
+    }
+#endregion Download CMTrace
 
 Stop-Transcript
