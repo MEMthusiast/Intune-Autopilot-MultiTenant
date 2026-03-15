@@ -1,9 +1,28 @@
+<#
+.SYNOPSIS
+    Cleans up OSDCloud deployment leftovers, enables OEM Product Key, enables BitLocker and downloads CMTrace to the system for easy log viewing.
+.DESCRIPTION
+    This script is automatically downloaded in combination with the TenantSelectorAutopilotHashUpload.ps1 script during the WinPE phase of OSDCloud deployment.
+    It is designed to be executed before the OOBE phase of Windows setup, and performs several post-deployment configuration tasks to ensure the device is properly set up and secured before the user starts using it.
+ 
+    It performs the following functions:
+        1. Cleans up OSDCloud leftovers and copies all logs to the Intune Management Extension log folder for easier troubleshooting.
+        2. Enables the OEM Product Key if available.
+        3. Enables BitLocker on all internal drives with TPM and XTS-AES 256 encryption.
+        4. Downloads CMTrace to the system for easy log viewing.
+.NOTES
+    File Name: SetupComplete.ps1
+    Author: https://github.com/MEMthusiast
+#>
+
 # Transcript log file name with timestamp
+
     $Global:Transcript = "$((Get-Date).ToString('yyyy-MM-dd-HHmmss'))-StartupComplete-Script.log"
     Start-Transcript -Path (Join-Path "$env:ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD\" $Global:Transcript) -ErrorAction Ignore
 
 #region cleanup OSDCloud
-    Write-Host "Execute OSD Cloud Cleanup Script"
+
+    Write-Host "Cleaning up OSDCloud leftovers"
 
     # Copying OSDCloud Logs
     If (Test-Path -Path 'C:\OSDCloud\Logs') {
@@ -35,13 +54,16 @@
 #endregion cleanup OSDCloud
 
 #region Enable WIndows Product Key
-    Write-Host "Enable OEM Product Key"
 
-    $(Get-WmiObject SoftwareLicensingService).OA3xOriginalProductKey | foreach{ if ( $null -ne $_ ) { Write-Host "Installing"$_;changepk.exe /Productkey $_ } else { Write-Host "No key present" } }
+    Write-Host "Enabling OEM Product Key"
+
+    $key = (Get-CimInstance SoftwareLicensingService).OA3xOriginalProductKey; if ($key) { Write-Host "Installing $key"; changepk.exe /ProductKey $key } else { Write-Host "No key present" }
+
 #endregion Enable WIndows Product Key
 
 #region Enable BitLocker
-    Write-Host "Enable BitLocker"
+
+    Write-Host "Enabling BitLocker"
 
     # Get driveletters from Internaldrives
     $disks = Get-Disk | Where-Object -FilterScript {$_.Bustype -ne "USB"}
@@ -71,7 +93,7 @@
         $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
         
         If ($BitlockerStatus.ProtectionStatus -like "*off*" -or $BitlockerStatus.EncryptionMethod -ne "XtsAes256")  {
-            #set registerkeys to newest encryption method
+            # Set registery keys to newest encryption method
             $Key = "HKLM:\SOFTWARE\Policies\Microsoft\FVE"
 
             # Ensure the registry key exists
@@ -92,7 +114,7 @@
                 catch{Write-Host -Message "Error disabling bitlocker"}
             }
             
-            #wait until decryption is complete
+            # Wait until decryption is complete
             $DecryptionComplete = $false
             while (-not $DecryptionComplete) {
                 Start-Sleep -Seconds 10
@@ -100,21 +122,21 @@
                 if ($BitlockerStatus.VolumeStatus -eq "FullyDecrypted") {
                     $DecryptionComplete = $true
                 }
-                #view process in log
+                # View process in log
                 Write-Host -Message "DecryptionPercentage $($BitlockerStatus.EncryptionPercentage)"
             }
             
-            #Add TPM chip for autounlock OS-disk
+            # Add TPM chip for autounlock OS-disk
             if ($BitlockerStatus.VolumeType -eq "OperatingSystem"){
                 try {Add-BitLockerKeyProtector -MountPoint $DriveLetter -TpmProtector}
                 catch {Write-Host -Message "Error TPM add to OperatingSystem drive"}
             }
 
-            #Encrypt disk
+            # Encrypt disk
             try {Enable-Bitlocker -MountPoint $DriveLetter -SkipHardwareTest -RecoveryPasswordProtector}
             catch {Write-Host -Message "Error enabling bitlocker"}
 
-            #wait until encryption status 100%
+            # Wait until encryption status 100%
             $EncryptionComplete = $false
             $maxRetries = 60
             $retryCount = 0
@@ -124,27 +146,51 @@
                 if (($BitlockerStatus.EncryptionPercentage -eq 100) -and ($BitlockerStatus.VolumeStatus -eq "FullyEncrypted")) {
                     $EncryptionComplete = $true
                 }
-                #view process in log
+                # view process in log
                 Write-Host -Message "EncryptionPercentage $($BitlockerStatus.EncryptionPercentage)"
             }
                 $retryCount++
             }
 
-            #backup bitlocker key to Microsoft
-            if ($BitlockerStatus.VolumeType -eq "OperatingSystem"){
-                try {BackupToAAD-BitLockerKeyProtector -MountPoint $DriveLetter -KeyProtectorId $BitlockerStatus.KeyProtector[1].KeyProtectorId}
-                catch {Write-Host -Message "Error backup bitlocker key to Microsoft"}
-            }
-            else {
-                try {BackupToAAD-BitLockerKeyProtector -MountPoint $DriveLetter -KeyProtectorId $BitlockerStatus.KeyProtector[0].KeyProtectorId}
-                catch {Write-Host -Message "Error backup bitlocker key to Microsoft"}
-            }
+            # Check if device is Entra ID or Hybrid Entra ID joined
+                $dsreg = dsregcmd /status | Out-String
 
-            #resume and enable bitlocker
+                $IsEntraJoined = $false
+                if ($dsreg -match "AzureAdJoined\s*:\s*YES" -or ($dsreg -match "DomainJoined\s*:\s*YES" -and $dsreg -match "AzureAdPrt\s*:\s*YES")) {
+                    $IsEntraJoined = $true
+                }
+                if ($IsEntraJoined) {
+                    Write-Host "Entra ID join detected, running BitLocker key backup"
+
+                    # Get BitLocker status for the drive
+                    $DriveLetter = "C:"  # Adjust if needed
+                    $BitlockerStatus = Get-BitLockerVolume -MountPoint $DriveLetter
+
+                    # Find RecoveryPassword protector explicitly
+                    $RecoveryKey = $BitlockerStatus.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }
+
+                    if ($RecoveryKey) {
+                        try {
+                            BackupToAAD-BitLockerKeyProtector -MountPoint $DriveLetter -KeyProtectorId $RecoveryKey.KeyProtectorId
+                            Write-Host "BitLocker key successfully backed up to Entra ID"
+                        }
+                        catch {
+                            Write-Host "Error backing up BitLocker key to Entra ID: $_"
+                        }
+                    }
+                    else {
+                        Write-Host "No Recovery Password protector found on drive $DriveLetter"
+                    }
+                }
+                else {
+                    Write-Host "Device not joined to Entra ID, skipping BitLocker key backup"
+                }
+                
+            # Resume and enable bitlocker
             try {Resume-BitLocker -MountPoint $DriveLetter}
             catch {Write-Host -Message "error resuming bitlocker"}
 
-            #autounlock bitlocker Data-drives
+            # Autounlock bitlocker Data-drives
             If ($BitlockerStatus.VolumeType -ne "OperatingSystem")  {
                 try {Enable-BitLockerAutoUnlock -MountPoint $DriveLetter}
                 catch {Write-Host -Message "Error autounlock"}
@@ -158,9 +204,11 @@
     if (Test-Path "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe") {
         Start-Process -FilePath "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe" -ArgumentList "intunemanagementextension://synccompliance"
     }
+    
 #endregion Enable Bitlocker
 
 #region Download CMTrace
+
     Write-Host "Downloading CMTrace..."
 
     $Url               = "https://github.com/MEMthusiast/Intune-Autopilot-MultiTenant/raw/refs/heads/main/SetupComplete/cmtrace.exe"
@@ -189,6 +237,7 @@
     catch {
         Write-Error "Failed to download CMTrace: $($_.Exception.Message)"
     }
+
 #endregion Download CMTrace
 
 Stop-Transcript

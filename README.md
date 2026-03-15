@@ -1,28 +1,16 @@
 # Intune-Autopilot-MultiTenant
 WinPE-compatible PowerShell tool to collect Autopilot hardware hashes, select a tenant, and register devices in Microsoft Intune with automatic profile assignment validation.
 
-Idea from: https://github.com/blawalt/WinPEAP
+This tool is designed for MSPs and to be run in combination with OSDCloud in a WinPE environment during the deployment of a Windows device.
 
-Best to Use in combination with OSDCloud and a Multi tenant enterprise application that has Autopilot rights.
+The Graph authentication logic is based on a multi-tenant app registration in Entra ID, allowing the same App ID and App Secret to be used across all tenants.
 
 OSDCloud: https://github.com/OSDeploy/OSDCloud
 
 Multi tenant app: https://learningbytesblog.com/posts/Muiltitenant-Entra-APP-for-multitenant-managment/
 
-# TenantSelectorAutopilotHashUpload.ps1
+Autopilot logic used in this tool and OSDCloud USB creation based on: https://github.com/blawalt/WinPEAP
 
 
-# SetupComplete.ps1
+# Install OSDCloud
 
-#OSDCloud log files are cleaned up
-
-Default OSDCloud log paths:
-
-C:\OSDCloud\Logs  
-C:\Windows\Temp\osdcloud-logs
-
-All logs moved with SetupComplete script to: C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD
-
-#Windows product key is enabled
-
-#Bitlocker will be enabled
