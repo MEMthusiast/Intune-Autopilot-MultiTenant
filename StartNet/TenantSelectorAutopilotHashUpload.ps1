@@ -50,7 +50,7 @@
 #region required parameters
 
     $GroupTag = "<YourGroupTag>"         # Set the desired Autopilot group tag for the device
-    $UploadToAutopilot = $true           # Set to $true to enable Autopilot upload, or $false to skip the upload step
+    $UploadToAutopilot = $true           # Set to $false to disable Autopilot upload, or $true to enable the upload step
     $AppId = "<MultitenantAppId>"        # The app ID of the multitenant Entra ID app registration.
     $AppSecret = "MultitenantAppSecret"  # Don't use this when using Key Vault retrieval.
     $KeyVault = $true                    # Set to $false to skip Key Vault retrieval and use hardcoded $AppSecret. Set to $true to use Key Vault.
