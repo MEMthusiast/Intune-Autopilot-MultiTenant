@@ -12,12 +12,16 @@
         3. Uploads the hardware hash to the selected tenant's Intune Autopilot via Microsoft Graph API.
         4. Waits for the Autopilot profile assignment to complete.
         5. Optionally downloads a SetupComplete.ps1 script and saves it to the appropriate location in the WinPE environment where it later will be copied to be executed before OOBE.
+        6. Optionally downloads tenant configuration from a JSON file at runtime, allowing for dynamic configuration without modifying the script.
+        7. Supports retrieving the multitenant enterprise app secret from Azure Key Vault for enhanced security.
 .PARAMETER GroupTag
     Required. The Autopilot group tag for all tenants to assign to the device.
 .PARAMETER UploadToAutopilot
     Optional. Indicates whether to upload the device to Autopilot. Default is $false.
 .PARAMETER AppSecret
-    Required. The app registration secret for authentication.
+    Conditionally required. The app secret for authentication to you multitenant enterprise app.
+    - Required if Key Vault retrieval (`$KeyVault`) is disabled ($KeyVault = $false).  
+    - Optional if Key Vault retrieval is enabled ($KeyVault = $true), because the secret will be retrieved from the Key Vault.
 .PARAMETER AppId
     Required. The app registration ID for authentication.
 .PARAMETER Name
@@ -33,6 +37,10 @@
     If not provided, the script will skip downloading. The default URL points to a sample SetupComplete.ps1 in this repository.
 .PARAMETER ParametersUrl
     Optional. If provided, the script will read tenant information from the downloaded JSON instead of using hardcoded parameters.
+.PARAMETER KeyVault
+    Optional. Indicates whether to retrieve the $AppSecret from an Azure Key Vault.
+    - If set to $true, `$VaultName`,`$SecretName`, `$SPNAppID`, `$SPNSecret` and `$SPNTenantID` must be set and `$AppSecret` at the top is optional.  
+    - If set to $false, `$AppSecret` must be provided in the script manually.
 .NOTES
     File Name: TenantSelectorAutopilotHashUpload.ps1
     Author: https://github.com/MEMthusiast
@@ -41,25 +49,76 @@
 
 #region required parameters
 
-    $GroupTag = ""
-    $UploadToAutopilot = $true 
-    $AppSecret = ""
-    $AppId = ""
+    $GroupTag = "<YourGroupTag>"         # Set the desired Autopilot group tag for the device
+    $UploadToAutopilot = $true           # Set to $true to enable Autopilot upload, or $false to skip the upload step
+    $AppId = "<MultitenantAppId>"        # The app ID of the multitenant Entra ID app registration.
+    $AppSecret = "MultitenantAppSecret"  # Don't use this when using Key Vault retrieval.
+    $KeyVault = $true                    # Set to $false to skip Key Vault retrieval and use hardcoded $AppSecret. Set to $true to use Key Vault.
 
 #endregion required parameters
 
 #region optional parameters
 
-$SetupCompleteUrl  = ""
-#Example: https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/SetupComplete/SetupComplete.ps1
-
-$ParametersUrl = ""
-#Example: https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/config.json
+    $SPNAppID           = "<AppId>"         # The app ID for authentication to Key Vault.
+    $SPNSecret          = "<AppSecret>"     # The app secret for authentication to Key Vault.
+    $SPNTenantID        = "<TenantId>"      # The tenant ID for authentication to Key Vault.
+    $VaultName          = "<KeyVaultName>"  # Name of your Key Vault
+    $SecretName         = "<SecretName>"    # Name of the secret to retrieve
+    $SetupCompleteUrl   = "<URL>"           # Example: https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/SetupComplete/SetupComplete.ps1
+    $ParametersUrl      = "<URL>"           # Example: https://raw.githubusercontent.com/MEMthusiast/Intune-Autopilot-MultiTenant/refs/heads/main/config.json
 
 #endregion optional parameters
 
+#region Key Vault
+
+    if ($KeyVault) {
+
+        try {
+            # Ensure NuGet provider
+            if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+                Write-Host "Installing NuGet package provider..."
+                Install-PackageProvider -Name NuGet -Force -Confirm:$false
+            }
+
+            # Install required modules if missing
+            $requiredModules = @("Az.Accounts","Az.KeyVault")
+            foreach ($mod in $requiredModules) {
+                if (-not (Get-Module -ListAvailable -Name $mod)) {
+                    Write-Host "Installing module $mod..."
+                    Install-Module -Name $mod -Force -Confirm:$false
+                }
+            }
+
+            Import-Module Az.Accounts -Force
+            Import-Module Az.KeyVault -Force
+
+            # Connect to Azure using SPN 
+            Write-Host "Connecting to Azure using Service Principal..."
+            $password = ConvertTo-SecureString $SPNSecret -AsPlainText -Force
+            $psCredential = New-Object System.Management.Automation.PSCredential ($SPNAppID, $password)
+            Connect-AzAccount -ServicePrincipal -Credential $psCredential -Tenant $SPNTenantID
+
+            # Retrieve the secret from Key Vault 
+            Write-Host "Retrieving secret '$SecretName' from Key Vault '$VaultName'..."
+            $AppSecret = Get-AzKeyVaultSecret -VaultName "$VaultName" -Name "$SecretName" -AsPlainText
+            Write-Host "Secret retrieved from Key Vault successfully."
+
+        } catch {
+            if ($_.Exception.Message -like "*Forbidden*") {
+                Write-Error "Access denied: Your IP is not allowed by the Key Vault firewall."
+            } else {
+                Write-Error "Failed to retrieve secret: $($_.Exception.Message)."
+            }       
+        }
+    } else {
+        Write-Host "KeyVault retrieval skipped."
+    }
+
+#endregion Key Vault
+
 #region injected parameters
-# If ParametersUrl is provided, read tenant information from the config file instead of using hardcoded parameters. This allows for dynamic configuration without modifying the script.
+
+    # If ParametersUrl is provided, read tenant information from the config file instead of using hardcoded parameters. This allows for dynamic configuration without modifying the script.
 
     if (-not [string]::IsNullOrWhiteSpace($ParametersUrl)) {
      
@@ -93,7 +152,8 @@ $ParametersUrl = ""
 #endregion injected parameters
 
 #region hardcoded parameters
-# If ParametersUrl is not provided, use hardcoded tenant information. This is useful if you prefer to have the tenant information directly in the script.
+
+    # If ParametersUrl is not provided, use hardcoded tenant information. This is useful if you prefer to have the tenant information directly in the script.
 
     if ( [string]::IsNullOrWhiteSpace($ParametersUrl)) {
     
