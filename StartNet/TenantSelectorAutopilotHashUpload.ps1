@@ -39,7 +39,7 @@
 .NOTES
     File Name   : TenantSelectorAutopilotHashUpload.ps1
     Author      : https://github.com/MEMthusiast
-    Version     : 2.2
+    Version     : 2.3
     Purpose     : Upload device hashes to selected tenant's Autopilot.
     Requires    : OSDCloud, a multi-tenant Entra ID enterprise app in each customer tenant, and optionally an Azure Key Vault for secret retrieval and hosting the SetupComplete.ps1 and config.json files in an Azure Blob that is only accessable from a trusted public IP address.
     References  : Autopilot upload logic based on: https://github.com/blawal/WinPEAP
@@ -69,12 +69,12 @@
 
 #region: Start Logging
     # Start transcript
-    $Global:Transcript = "$((Get-Date).ToString('dd-MM-yyyy HH:mm:ss'))-Invoke-MT-AP-Script.log"
+    $Global:Transcript = "$((Get-Date).ToString('dd-MM-yyyy-HHmmss'))-Invoke-MT-AP.log"
     Start-Transcript -Path (Join-Path "X:\OSDCloud\Config\Scripts\SetupComplete" $Global:Transcript) -ErrorAction Ignore
 
     # Start timer
     $startTime = Get-Date
-    Write-Host "Script started at: $($startTime.ToString('dd-MM-yyyy HH:mm:ss'))" -ForegroundColor Yellow
+    Write-Host "Script started at: $($startTime.ToString('dd-MM-yyyy-HHmmss'))" -ForegroundColor Yellow
 
     # Get public IP address
     try {
