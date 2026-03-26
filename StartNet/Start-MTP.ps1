@@ -809,8 +809,8 @@
 #endregion
 
 #region: Start OSDCloud
-    # Output deployment information before starting OSDCloud
-    Write-Host "`nDeployment Information" -ForegroundColor DarkCyan
+    # Output provisioning information before starting OSDCloud
+    Write-Host "`nProvisioning Information" -ForegroundColor DarkCyan
     Write-Host "---------------------------------------------" -ForegroundColor DarkGray
 
     Write-Host ("{0,-18}: " -f "Tenant")    -NoNewline -ForegroundColor DarkGray
@@ -855,6 +855,7 @@
 
     try {
         Write-Host "Now launching Start-OSDCloud..." -ForegroundColor Yellow
+        Update-Module -Name OSD -ErrorAction Ignore
         Start-OSDCloud @StartOSDCloudParams -ErrorAction Stop
     }
     catch {
