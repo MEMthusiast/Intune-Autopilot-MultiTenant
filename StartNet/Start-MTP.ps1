@@ -69,7 +69,7 @@
 
 #region: Start Logging
     # Start transcript
-    $Global:Transcript = "$((Get-Date).ToString('dd-MM-yyyy-HHmmss'))-Invoke-MT-AP.log"
+    $Global:Transcript = "$((Get-Date).ToString('dd-MM-yyyy-HHmmss'))-Start-MTP.log"
     Start-Transcript -Path (Join-Path "X:\OSDCloud\Config\Scripts\SetupComplete" $Global:Transcript) -ErrorAction Ignore
 
     # Start timer
