@@ -1,3 +1,10 @@
+<#
+.SYNOPSIS
+    Exports tenant information to a JSON file.
+.DESCRIPTION
+    This script connects to Partner Center and exports tenant information to a JSON file.
+#>
+
 # Output file
 $outputFile = ".\TenantsConfig.json"
 

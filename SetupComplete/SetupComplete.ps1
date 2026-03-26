@@ -2,7 +2,7 @@
 .SYNOPSIS
     Cleans up OSDCloud deployment leftovers, enables OEM Product Key, enables BitLocker and downloads CMTrace to the system for easy log viewing.
 .DESCRIPTION
-    This script is automatically downloaded in combination with the TenantSelectorAutopilotHashUpload.ps1 script during the WinPE phase of OSDCloud deployment.
+    This script is automatically downloaded in combination with the Start-MTP.ps1 script during the WinPE phase of OSDCloud deployment.
     It is designed to be executed before the OOBE phase of Windows setup, and performs several post-deployment configuration tasks to ensure the device is properly set up and secured before the user starts using it.
  
     It performs the following functions:
@@ -24,7 +24,7 @@
 
     Write-Host "Downloading CMTrace..."
 
-    $Url               = "https://github.com/MEMthusiast/Intune-Autopilot-MultiTenant/raw/refs/heads/main/cmtrace.exe"
+    $Url               = "https://github.com/MEMthusiast/MT-Provisioner/raw/refs/heads/main/cmtrace.exe"
     $DestinationFolder = "C:\Windows\System32"
 
     try {
