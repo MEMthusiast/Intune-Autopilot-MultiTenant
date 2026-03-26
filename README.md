@@ -11,6 +11,21 @@ Multi tenant app: https://learningbytesblog.com/posts/Muiltitenant-Entra-APP-for
 
 Autopilot logic used in this tool and OSDCloud USB creation based on: https://github.com/blawalt/WinPEAP
 
+## Optionally
 
-# Install OSDCloud
+* A multi-tenant Entra ID enterprise application
 
+* An Azure Key Vault
+
+* An Azure Blob Storage
+
+
+## Prerequisites
+
+* OSDCloud PowerShell module
+    ```powershell
+    Install-Module OSDCloud
+    ```
+* **Windows Assessment and Deployment Kit (ADK) and WinPE Add-on:** Install the Windows 10 ADK and the WinPE add-on. These provide deployment tools, including WinPE itself and the `oa3tool.exe` needed later.
+    * Download link: [Windows ADK Download](https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install)
+    * Ensure installation of **ADK** and the **WinPE Add-on** 
