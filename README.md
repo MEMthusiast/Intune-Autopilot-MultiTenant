@@ -4,11 +4,11 @@
 
 ## 📋 Table of Contents
 
-- [Overview](#-overview)
-- [Optional prerequisites](#-Optional-prerequisites)
-- [Usage](#-Prerequisites)
-- [Tenants Configuration](#-Tenants-configuration)
-- [OSDCloud](#-OSDCloud)
+- [Overview](#Overview)
+- [Optional prerequisites](#Optional-prerequisites)
+- [Usage](#Prerequisites)
+- [Tenants Configuration](#Tenants-Configuration)
+- [OSDCloud](#osdcloud)
 
 ## Overview
 
