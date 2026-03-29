@@ -24,6 +24,10 @@ Multi tenant app: https://learningbytesblog.com/posts/Muiltitenant-Entra-APP-for
 
 Autopilot logic used in this tool and OSDCloud USB creation based on: https://github.com/blawalt/WinPEAP
 
+## Screenshots
+
+![Tenant Selector](image1.png)
+
 ## Optional prerequisites
 
 * A (multi-tenant) Entra ID enterprise application in every tenant
