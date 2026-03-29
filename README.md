@@ -24,7 +24,7 @@ Multi tenant app: https://learningbytesblog.com/posts/Muiltitenant-Entra-APP-for
 
 Autopilot logic used in this tool and OSDCloud USB creation based on: https://github.com/blawalt/WinPEAP
 
-## Screenshots
+### Screenshots
 *Tenant Selector*
 <img width="719" height="564" alt="Image" src="https://github.com/user-attachments/assets/e6c20a31-bd94-4a4b-af44-2483df9e5c08" />
 
