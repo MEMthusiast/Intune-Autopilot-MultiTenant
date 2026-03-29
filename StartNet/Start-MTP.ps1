@@ -227,6 +227,18 @@ $AllTenants = @(
     $Tenants | Sort-Object @{ Expression = { -not [bool]$_.Pinned } }, Name
 )
 
+# Unicode normalization for names with special characters (mojibake)
+$Tenants | ForEach-Object {
+    if ($null -ne $_ -and $null -ne $_.Name) {
+        # If it contains typical mojibake patterns, re-decode as UTF-8 from Latin1 bytes
+        if ($_.Name -match 'Ã.|Â.|�') {
+            $_.Name = [System.Text.Encoding]::UTF8.GetString(
+                [System.Text.Encoding]::GetEncoding("ISO-8859-1").GetBytes([string]$_.Name)
+            )
+        }
+    }
+}
+
 # Validation Rule Engine
 # - TenantID ERROR (blocking) when Autopilot = true + TenantID empty
 # - GroupTag warning only when TenantID has value + Autopilot true + GroupTag empty
@@ -309,12 +321,13 @@ $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'FixedDialog'
 $form.ControlBox = $false
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
-$form.Font = New-Object System.Drawing.Font("Segoe UI", 9.5)
+$form.Font = New-Object System.Drawing.Font("Segoe UI Light", 9.5)
 
 # Search
 $searchLabel = New-Object System.Windows.Forms.Label
 $searchLabel.Text = "Search"
 $searchLabel.Location = '10,10'
+$searchLabel.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 10)
 
 $searchBox = New-Object System.Windows.Forms.TextBox
 $searchBox.Location = '10,30'
@@ -365,7 +378,8 @@ $list.Add_DrawItem({
     # Text flags: clean + vertically centered + ellipsis
     $flags = [System.Windows.Forms.TextFormatFlags]::Left -bor
              [System.Windows.Forms.TextFormatFlags]::VerticalCenter -bor
-             [System.Windows.Forms.TextFormatFlags]::EndEllipsis
+             [System.Windows.Forms.TextFormatFlags]::EndEllipsis -bor
+             [System.Windows.Forms.TextFormatFlags]::NoPrefix
 
     # Force integer-safe rectangle values
     $x = [int]$e.Bounds.X + 6
@@ -392,11 +406,13 @@ $detailsHeader = New-Object System.Windows.Forms.Label
 $detailsHeader.Text = "Provisioning details"
 $detailsHeader.Location = '270,60'
 $detailsHeader.Size = '400,18'
+$detailsHeader.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 10)
 
 $validationHeader = New-Object System.Windows.Forms.Label
 $validationHeader.Text = "Validation"
 $validationHeader.Location = '270,270'
 $validationHeader.Size = '400,18'
+$validationHeader.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 10)
 
 # Provisioning details panel
 $details = New-Object System.Windows.Forms.TextBox
@@ -413,6 +429,7 @@ $validation.Location = '270,290'
 $validation.Size = '400,80'
 $validation.Multiline = $true
 $validation.ReadOnly = $true
+$validation.Font = New-Object System.Drawing.Font('Consolas',9)
 
 # Start Button
 $start = New-Object System.Windows.Forms.Button
