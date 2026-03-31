@@ -54,7 +54,7 @@
 .NOTES
     File Name   : Start-MTP.ps1
     Author      : https://github.com/MEMthusiast
-    Version     : 4.03
+    Version     : 4.04
     Purpose     : Upload device hashes to the selected tenant and install an operating system.
     Requires    : The OSDCloud PowerShell module, a multi-tenant Entra ID enterprise application in each tenant, and optionally an Azure Key Vault for secret retrieval, along with hosting the SetupComplete.ps1 and TenantsConfig.json files in an Azure Blob (that is only accessible from a trusted public IP address).
     References  : Autopilot upload logic in this script is based on: https://github.com/blawal/WinPEAP
@@ -620,8 +620,14 @@ $form.Controls.AddRange(@(
 # Apply layout once after controls are added
 Update-Layout
 
-# Re-apply after show / resize
-$form.Add_Shown({ Update-Layout })
+# Re-apply after show / resize + focus search box on startup
+$form.Add_Shown({
+    Update-Layout
+    $form.ActiveControl = $searchBox
+    $searchBox.Focus() | Out-Null
+    $searchBox.SelectionStart = $searchBox.TextLength
+    $searchBox.SelectionLength = 0
+})
 $form.Add_Resize({ Update-Layout })
 
 # Populate list helper
@@ -702,7 +708,9 @@ $start.Add_Click({
 })
 
 # Run
+Write-Host "Starting Tenant Selector..." -ForegroundColor Cyan
 [void]$form.ShowDialog()
+Write-Host "Tenant selected continuing script.." -ForegroundColor Green
 #endregion
 
 #region: Key Vault
