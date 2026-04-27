@@ -27,10 +27,73 @@ Autopilot logic used in this tool and OSDCloud USB creation based on: https://gi
 ## Screenhots
 
 ### Tenant Selector
-*test*
+
 <img width="719" height="564" alt="Image" src="https://github.com/user-attachments/assets/1b94467e-c879-486c-a2eb-b98818f32f51" />
 
+## Choices
+
+## Configuration Choice
+
+Before using this solution, decide how you want to store the configuration and authentication details.
+
+You can choose between:
+
+### Option 1 — Hardcoded parameters in `Start-MTP.ps1`
+
+All tenant settings, URLs, and authentication details are stored directly inside the script.
+
+This is suitable when:
+
+- the script is only used internally
+- deployment is started from a **centralized Windows deployment server**
+- there is no need to restrict usage outside your own environment
+
+### Option 2 — Hosted externally
+
+Configuration files are stored externally, for example in an Azure blob storage:
+
+- `TenantsConfig.json`
+- optional provisioning scripts such as `SetupComplete.ps1`
+
+Authentication secrets can optionally be stored in **Azure Key Vault** instead of inside the script.
+
+This is recommended when:
+
+- you want an additional security layer
+- you do not want to maintain Tenant configuration settings directly inside `Start-MTP.ps1`
+- you are also using bootable USB sticks
+
+---
+
+## Why host the files in Azure Blob Storage and use Azure Key Vault?
+
+A major benefit of hosting the configuration externally is that access can be restricted to a **specific public IP address**.
+
+This means provisioning only works from an approved network location.
+
+### Example
+
+If you are using a **Bootable USB stick** and that USB stick is lost or stolen, the script cannot be used successfully outside the approved location, because:
+
+- the **tenant configuration file**
+- the **optional provisioning script**
+- and the **authentication secret in Azure Key Vault**
+
+can only be accessed from the allowed public IP address.
+
+This creates an additional **safety net**.
+
+---
+
+## Practical Recommendation
+
+- If you use **Bootable USB sticks** for deployment, hosting the configuration in **Azure Blob Storage** and secrets in **Azure Key Vault** is the safer choice.
+- If you use a **centralized Windows deployment server** in a controlled environment, you may choose to use **hardcoded parameters** in `Start-MTP.ps1` for simplicity.
+
+
+
 ## Optional prerequisites
+
 
 * A (multi-tenant) Entra ID enterprise application in every tenant
 
